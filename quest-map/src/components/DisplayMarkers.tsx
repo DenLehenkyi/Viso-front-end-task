@@ -6,11 +6,13 @@ export default function DisplayMarkers({
   setMarkers,
   markerCluster,
   deletemarker,
+  clearAllMarkers,
 }: {
   markers: google.maps.Marker[];
   setMarkers: React.Dispatch<React.SetStateAction<google.maps.Marker[]>>;
   markerCluster?: any;
   deletemarker?: any;
+  clearAllMarkers?: () => void;
 }) {
   return (
     <div className="showMarkers">
@@ -20,6 +22,7 @@ export default function DisplayMarkers({
           <DeleteMarker onDelete={() => deletemarker(marker)} />
         </div>
       ))}
+      <button onClick={clearAllMarkers}>Очистити всі маркери</button>
     </div>
   );
 }

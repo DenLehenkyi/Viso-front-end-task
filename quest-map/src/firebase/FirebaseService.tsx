@@ -61,19 +61,20 @@ export async function deleteMarkerFromFirestore(docId: string): Promise<void> {
   }
 }
 
-export async function getMarkersFromFirestore(): Promise<MarkerData[]> {
+export async function getMarkersFromFirestore(): Promise<
+  (MarkerData & { docId: string })[]
+> {
   try {
     const markersCollection = collection(db, "quests");
     const q = query(markersCollection, orderBy("timestamp", "asc"));
     const querySnapshot = await getDocs(q);
 
-    const markers: MarkerData[] = [];
+    const markers: (MarkerData & { docId: string })[] = [];
     querySnapshot.forEach((doc) => {
       const data = doc.data() as MarkerData;
       markers.push({
-        location: data.location,
-        timestamp: data.timestamp,
-        next: data.next || null,
+        ...data,
+        docId: doc.id,
       });
     });
 

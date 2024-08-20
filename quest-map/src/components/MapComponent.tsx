@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import DisplayMarkers from "./DisplayMarkers";
 import {
+  getMarkersFromFirestore, // Імпортуємо функцію для отримання маркерів
   addMarkerToFirestore,
   deleteMarkerFromFirestore,
   updateMarkerInFirestore,
@@ -11,9 +12,7 @@ import { doc, updateDoc } from "firebase/firestore";
 
 export default function MapComponent() {
   const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
-
   const [prevMarker, setPrevMarker] = useState<google.maps.Marker | null>(null);
-
   let labelIndex = 1;
   let markerCluster: MarkerClusterer | null = null;
 
@@ -43,6 +42,49 @@ export default function MapComponent() {
     );
 
     markerCluster = new MarkerClusterer({ map, markers });
+
+    loadMarkersFromFirestore(map);
+  }
+
+  async function loadMarkersFromFirestore(map: google.maps.Map) {
+    const firestoreMarkers = await getMarkersFromFirestore();
+    const loadedMarkers: google.maps.Marker[] = [];
+
+    firestoreMarkers.forEach((markerData) => {
+      const marker = new google.maps.Marker({
+        position: markerData.location,
+        label: `${labelIndex}`,
+        map: map,
+        draggable: true,
+      });
+
+      (marker as any).docId = markerData.docId;
+
+      marker.addListener(
+        "dragend",
+        async (event: google.maps.MapMouseEvent) => {
+          if (event.latLng) {
+            const newLocation = event.latLng.toJSON();
+            updateMarkerPosition(marker, newLocation);
+          }
+        }
+      );
+
+      marker.addListener("click", () => {
+        deleteMarker(marker);
+      });
+
+      labelIndex++;
+      loadedMarkers.push(marker);
+    });
+
+    setMarkers((prevMarkers) => {
+      const newMarkers = [...prevMarkers, ...loadedMarkers];
+      if (markerCluster) {
+        markerCluster.addMarkers(loadedMarkers);
+      }
+      return newMarkers;
+    });
   }
 
   async function addMarker(
@@ -61,28 +103,21 @@ export default function MapComponent() {
     if (newDocId) {
       (marker as any).docId = newDocId;
 
-      setPrevMarker((prevMarker) => {
-        if (prevMarker) {
-          const prevDocId = (prevMarker as any).docId;
-          console.log(prevDocId);
+      if (prevMarker) {
+        const prevDocId = (prevMarker as any).docId;
 
-          if (prevDocId && prevDocId !== newDocId) {
-            try {
-              updateDoc(doc(db, "quests", prevDocId), { next: newDocId });
-              console.log(
-                `Updated 'next' field of document ID ${prevDocId} to ${newDocId}`
-              );
-            } catch (error) {
-              console.error(
-                `Failed to update 'next' field for ${prevDocId}`,
-                error
-              );
-            }
+        if (prevDocId && prevDocId !== newDocId) {
+          try {
+            await updateDoc(doc(db, "quests", prevDocId), { next: newDocId });
+          } catch (error) {
+            console.error(
+              `Failed to update 'next' field for ${prevDocId}`,
+              error
+            );
           }
         }
-        console.log(prevMarker);
-        return marker;
-      });
+      }
+      setPrevMarker(marker);
     }
 
     marker.addListener("dragend", async (event: google.maps.MapMouseEvent) => {
@@ -138,6 +173,17 @@ export default function MapComponent() {
     }
   }
 
+  async function clearAllMarkers() {
+    markers.forEach((marker) => {
+      deleteMarker(marker);
+    });
+
+    if (markerCluster) {
+      markerCluster.clearMarkers();
+    }
+
+    setMarkers([]);
+  }
   return (
     <div id="container">
       <div id="map"></div>
@@ -145,6 +191,7 @@ export default function MapComponent() {
         markers={markers}
         setMarkers={setMarkers}
         deletemarker={deleteMarker}
+        clearAllMarkers={clearAllMarkers}
       ></DisplayMarkers>
     </div>
   );
