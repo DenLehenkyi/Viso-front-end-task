@@ -178,6 +178,7 @@ export default function useMarkerManager({
       if (markerCluster) {
         markerCluster.addMarker(marker);
       }
+      onMarkersChange(newMarkers);
       return newMarkers;
     });
   }
