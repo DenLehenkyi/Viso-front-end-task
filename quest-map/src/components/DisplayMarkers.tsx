@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import DeleteMarker from "./DeleteMarkerButton";
 
 export default function DisplayMarkers({
@@ -14,9 +14,40 @@ export default function DisplayMarkers({
   deleteMarker?: (marker: google.maps.Marker) => void;
   clearAllMarkers?: () => void;
 }) {
+  const [addresses, setAddresses] = useState<string[]>([]);
+
   useEffect(() => {
-    console.log(markers);
+    markers.forEach((marker, index) => {
+      getMarkerLocationName(marker, index);
+
+      // Додаємо слухача на зміну позиції маркера
+      marker.addListener("dragend", () => {
+        // Оновлюємо адресу після перетягування
+        getMarkerLocationName(marker, index);
+      });
+    });
   }, [markers]);
+
+  const getMarkerLocationName = (marker: google.maps.Marker, index: number) => {
+    const geocoder = new google.maps.Geocoder();
+    const position = marker.getPosition();
+
+    if (position) {
+      geocoder.geocode({ location: position }, (results, status) => {
+        if (status === "OK" && results && results.length > 0) {
+          setAddresses((prevAddresses) => {
+            const newAddresses = [...prevAddresses];
+            newAddresses[index] = results[0].formatted_address;
+            return newAddresses;
+          });
+        } else {
+          console.error("Не вдалося знайти адресу для цієї локації.");
+        }
+      });
+    } else {
+      console.error("Позиція маркера не доступна.");
+    }
+  };
 
   return (
     <div className="showMarkers">
@@ -24,16 +55,26 @@ export default function DisplayMarkers({
       <div className="markerList">
         {markers.map((marker, index) => (
           <div key={index} className="markerItem">
-            <span className="markerLabel">
-              Маркер : {String(marker.getTitle())}
-            </span>
+            <div>
+              <span className="markerLabel">
+                {`Маркер ${marker.getLabel()} `}
+              </span>
+              <span>
+                {`: ${
+                  addresses[index] ? addresses[index] : "Отримання адреси..."
+                } `}
+              </span>
+            </div>
+
             <DeleteMarker onDelete={() => deleteMarker?.(marker)} />
           </div>
         ))}
       </div>
-      <button className="clearButton" onClick={clearAllMarkers}>
-        Очистити всі маркери
-      </button>
+      {markers.length > 0 && (
+        <button className="clearButton" onClick={clearAllMarkers}>
+          Очистити всі маркери
+        </button>
+      )}
     </div>
   );
 }
