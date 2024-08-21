@@ -1,19 +1,23 @@
-import React from "react";
+import React, { useEffect } from "react";
 import DeleteMarker from "./DeleteMarkerButton";
 
 export default function DisplayMarkers({
   markers,
   setMarkers,
   markerCluster,
-  deletemarker,
   clearAllMarkers,
+  deleteMarker,
 }: {
   markers: google.maps.Marker[];
   setMarkers: React.Dispatch<React.SetStateAction<google.maps.Marker[]>>;
   markerCluster?: any;
-  deletemarker?: any;
+  deleteMarker?: (marker: google.maps.Marker) => void;
   clearAllMarkers?: () => void;
 }) {
+  useEffect(() => {
+    console.log(markers);
+  }, [markers]);
+
   return (
     <div className="showMarkers">
       <h3 className="header">Список Маркерів</h3>
@@ -21,9 +25,9 @@ export default function DisplayMarkers({
         {markers.map((marker, index) => (
           <div key={index} className="markerItem">
             <span className="markerLabel">
-              Маркер {index + 1}: {String(marker.getLabel())}
+              Маркер : {String(marker.getTitle())}
             </span>
-            <DeleteMarker onDelete={() => deletemarker(marker)} />
+            <DeleteMarker onDelete={() => deleteMarker?.(marker)} />
           </div>
         ))}
       </div>

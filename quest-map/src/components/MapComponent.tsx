@@ -13,8 +13,12 @@ import { doc, updateDoc } from "firebase/firestore";
 export default function MapComponent() {
   const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
   const [prevMarker, setPrevMarker] = useState<google.maps.Marker | null>(null);
+  const [deletedMarkerIds, setDeletedMarkerIds] = useState<string[]>([]);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [markerCluster, setMarkerCluster] = useState<MarkerClusterer | null>(
+    null
+  );
   let labelIndex = 1;
-  let markerCluster: MarkerClusterer | null = null;
 
   useEffect(() => {
     initMap();
@@ -25,25 +29,31 @@ export default function MapComponent() {
       "maps"
     )) as google.maps.MapsLibrary;
 
-    const map = new Map(document.getElementById("map") as HTMLElement, {
+    const mapInstance = new Map(document.getElementById("map") as HTMLElement, {
       center: { lat: 49.8397, lng: 24.0297 },
       zoom: 14,
       mapId: "4504f8b37365c3d0",
     });
 
+    setMap(mapInstance);
+
     google.maps.event.addListener(
-      map,
+      mapInstance,
       "click",
       (event: google.maps.MapMouseEvent) => {
         if (event.latLng) {
-          addMarker(event.latLng.toJSON(), map);
+          addMarker(event.latLng.toJSON(), mapInstance);
         }
       }
     );
 
-    markerCluster = new MarkerClusterer({ map, markers });
+    const clusterInstance = new MarkerClusterer({
+      map: mapInstance,
+      markers: [],
+    });
+    setMarkerCluster(clusterInstance);
 
-    await loadMarkersFromFirestore(map);
+    loadMarkersFromFirestore(mapInstance);
   }
 
   async function loadMarkersFromFirestore(map: google.maps.Map) {
@@ -51,6 +61,10 @@ export default function MapComponent() {
     const loadedMarkers: google.maps.Marker[] = [];
 
     firestoreMarkers.forEach((markerData) => {
+      if (deletedMarkerIds.includes(markerData.docId)) {
+        return;
+      }
+
       const marker = new google.maps.Marker({
         position: markerData.location,
         label: `${labelIndex}`,
@@ -78,28 +92,34 @@ export default function MapComponent() {
       loadedMarkers.push(marker);
     });
 
-    setMarkers(loadedMarkers);
-    if (markerCluster) {
-      markerCluster.clearMarkers();
-      markerCluster.addMarkers(loadedMarkers);
-    }
+    setMarkers((prevMarkers) => {
+      const newMarkers = [...prevMarkers, ...loadedMarkers];
+      if (markerCluster) {
+        markerCluster.addMarkers(loadedMarkers);
+      }
+      return newMarkers;
+    });
   }
 
   function deleteMarker(marker: google.maps.Marker) {
     const docId = (marker as any).docId;
 
     if (docId) {
-      deleteMarkerFromFirestore(docId).then(() => {
-        marker.setMap(null);
-        setMarkers((prevMarkers) => {
-          const newMarkers = prevMarkers.filter((m) => m !== marker);
-          if (markerCluster) {
-            markerCluster.removeMarker(marker);
-          }
-          return newMarkers;
-        });
-      });
+      deleteMarkerFromFirestore(docId);
+      setDeletedMarkerIds((prevIds) => [...prevIds, docId]);
     }
+
+    marker.setMap(null);
+
+    setMarkers((prevMarkers) => {
+      const newMarkers = prevMarkers.filter((m) => m !== marker);
+
+      if (markerCluster) {
+        markerCluster.removeMarker(marker);
+      }
+
+      return newMarkers;
+    });
   }
 
   function updateMarkerPosition(
@@ -130,45 +150,49 @@ export default function MapComponent() {
     if (newDocId) {
       (marker as any).docId = newDocId;
 
-      if (prevMarker) {
-        const prevDocId = (prevMarker as any).docId;
+      setPrevMarker((prevMarker) => {
+        if (prevMarker) {
+          const prevDocId = (prevMarker as any).docId;
+          console.log(prevDocId);
 
-        if (prevDocId && prevDocId !== newDocId) {
-          try {
-            await updateDoc(doc(db, "quests", prevDocId), { next: newDocId });
-          } catch (error) {
-            console.error(
-              `Failed to update 'next' field for ${prevDocId}`,
-              error
-            );
+          if (prevDocId && prevDocId !== newDocId) {
+            try {
+              updateDoc(doc(db, "quests", prevDocId), { next: newDocId });
+              console.log(
+                `Updated 'next' field of document ID ${prevDocId} to ${newDocId}`
+              );
+            } catch (error) {
+              console.error(
+                `Failed to update 'next' field for ${prevDocId}`,
+                error
+              );
+            }
           }
         }
-      }
-      setPrevMarker(marker);
-
-      marker.addListener(
-        "dragend",
-        async (event: google.maps.MapMouseEvent) => {
-          if (event.latLng) {
-            const newLocation = event.latLng.toJSON();
-            updateMarkerPosition(marker, newLocation);
-          }
-        }
-      );
-
-      marker.addListener("click", () => {
-        deleteMarker(marker);
-      });
-
-      labelIndex++;
-      setMarkers((prevMarkers) => {
-        const newMarkers = [...prevMarkers, marker];
-        if (markerCluster) {
-          markerCluster.addMarker(marker);
-        }
-        return newMarkers;
+        console.log(prevMarker);
+        return marker;
       });
     }
+
+    marker.addListener("dragend", async (event: google.maps.MapMouseEvent) => {
+      if (event.latLng) {
+        const newLocation = event.latLng.toJSON();
+        updateMarkerPosition(marker, newLocation);
+      }
+    });
+
+    marker.addListener("click", () => {
+      deleteMarker(marker);
+    });
+
+    labelIndex++;
+    setMarkers((prevMarkers) => {
+      const newMarkers = [...prevMarkers, marker];
+      if (markerCluster) {
+        markerCluster.addMarker(marker);
+      }
+      return newMarkers;
+    });
   }
 
   async function clearAllMarkers() {
@@ -190,7 +214,8 @@ export default function MapComponent() {
         markers={markers}
         setMarkers={setMarkers}
         clearAllMarkers={clearAllMarkers}
-        deletemarker={deleteMarker}
+        deleteMarker={deleteMarker}
+        markerCluster={markerCluster}
       ></DisplayMarkers>
     </div>
   );
