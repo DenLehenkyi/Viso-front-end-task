@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import DisplayMarkers from "./DisplayMarkers";
 import {
-  getMarkersFromFirestore, // Імпортуємо функцію для отримання маркерів
+  getMarkersFromFirestore,
   addMarkerToFirestore,
   deleteMarkerFromFirestore,
   updateMarkerInFirestore,
@@ -43,7 +43,7 @@ export default function MapComponent() {
 
     markerCluster = new MarkerClusterer({ map, markers });
 
-    loadMarkersFromFirestore(map);
+    await loadMarkersFromFirestore(map);
   }
 
   async function loadMarkersFromFirestore(map: google.maps.Map) {
@@ -78,13 +78,40 @@ export default function MapComponent() {
       loadedMarkers.push(marker);
     });
 
-    setMarkers((prevMarkers) => {
-      const newMarkers = [...prevMarkers, ...loadedMarkers];
-      if (markerCluster) {
-        markerCluster.addMarkers(loadedMarkers);
-      }
-      return newMarkers;
-    });
+    setMarkers(loadedMarkers);
+    if (markerCluster) {
+      markerCluster.clearMarkers();
+      markerCluster.addMarkers(loadedMarkers);
+    }
+  }
+
+  function deleteMarker(marker: google.maps.Marker) {
+    const docId = (marker as any).docId;
+
+    if (docId) {
+      deleteMarkerFromFirestore(docId).then(() => {
+        marker.setMap(null);
+        setMarkers((prevMarkers) => {
+          const newMarkers = prevMarkers.filter((m) => m !== marker);
+          if (markerCluster) {
+            markerCluster.removeMarker(marker);
+          }
+          return newMarkers;
+        });
+      });
+    }
+  }
+
+  function updateMarkerPosition(
+    marker: google.maps.Marker,
+    location: google.maps.LatLngLiteral
+  ) {
+    marker.setPosition(location);
+
+    const docId = (marker as any).docId;
+    if (docId) {
+      updateMarkerInFirestore(docId, { location });
+    }
   }
 
   async function addMarker(
@@ -118,58 +145,29 @@ export default function MapComponent() {
         }
       }
       setPrevMarker(marker);
-    }
 
-    marker.addListener("dragend", async (event: google.maps.MapMouseEvent) => {
-      if (event.latLng) {
-        const newLocation = event.latLng.toJSON();
-        updateMarkerPosition(marker, newLocation);
-      }
-    });
+      marker.addListener(
+        "dragend",
+        async (event: google.maps.MapMouseEvent) => {
+          if (event.latLng) {
+            const newLocation = event.latLng.toJSON();
+            updateMarkerPosition(marker, newLocation);
+          }
+        }
+      );
 
-    marker.addListener("click", () => {
-      deleteMarker(marker);
-    });
+      marker.addListener("click", () => {
+        deleteMarker(marker);
+      });
 
-    labelIndex++;
-    setMarkers((prevMarkers) => {
-      const newMarkers = [...prevMarkers, marker];
-      if (markerCluster) {
-        markerCluster.addMarker(marker);
-      }
-      return newMarkers;
-    });
-  }
-
-  function deleteMarker(marker: google.maps.Marker) {
-    const docId = (marker as any).docId;
-
-    if (docId) {
-      deleteMarkerFromFirestore(docId);
-    }
-
-    marker.setMap(null);
-
-    setMarkers((prevMarkers) => {
-      const newMarkers = prevMarkers.filter((m) => m !== marker);
-
-      if (markerCluster) {
-        markerCluster.removeMarker(marker);
-      }
-
-      return newMarkers;
-    });
-  }
-
-  function updateMarkerPosition(
-    marker: google.maps.Marker,
-    location: google.maps.LatLngLiteral
-  ) {
-    marker.setPosition(location);
-
-    const docId = (marker as any).docId;
-    if (docId) {
-      updateMarkerInFirestore(docId, { location });
+      labelIndex++;
+      setMarkers((prevMarkers) => {
+        const newMarkers = [...prevMarkers, marker];
+        if (markerCluster) {
+          markerCluster.addMarker(marker);
+        }
+        return newMarkers;
+      });
     }
   }
 
@@ -184,14 +182,15 @@ export default function MapComponent() {
 
     setMarkers([]);
   }
+
   return (
     <div id="container">
       <div id="map"></div>
       <DisplayMarkers
         markers={markers}
         setMarkers={setMarkers}
-        deletemarker={deleteMarker}
         clearAllMarkers={clearAllMarkers}
+        deletemarker={deleteMarker}
       ></DisplayMarkers>
     </div>
   );

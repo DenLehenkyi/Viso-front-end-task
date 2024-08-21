@@ -16,13 +16,20 @@ export default function DisplayMarkers({
 }) {
   return (
     <div className="showMarkers">
-      {markers.map((marker, index) => (
-        <div key={index} className="marker">
-          Маркер: {String(marker.getLabel())}
-          <DeleteMarker onDelete={() => deletemarker(marker)} />
-        </div>
-      ))}
-      <button onClick={clearAllMarkers}>Очистити всі маркери</button>
+      <h3 className="header">Список Маркерів</h3>
+      <div className="markerList">
+        {markers.map((marker, index) => (
+          <div key={index} className="markerItem">
+            <span className="markerLabel">
+              Маркер {index + 1}: {String(marker.getLabel())}
+            </span>
+            <DeleteMarker onDelete={() => deletemarker(marker)} />
+          </div>
+        ))}
+      </div>
+      <button className="clearButton" onClick={clearAllMarkers}>
+        Очистити всі маркери
+      </button>
     </div>
   );
 }
