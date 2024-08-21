@@ -7,6 +7,8 @@ import {
 } from "../firebase/FirebaseService";
 
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../firebase/FirebaseConfig";
 
 interface MarkerManagerProps {
   map: google.maps.Map | null;
@@ -20,6 +22,7 @@ export default function useMarkerManager({
   onMarkersChange,
 }: MarkerManagerProps) {
   const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
+  const [prevMarker, setPrevMarker] = useState<google.maps.Marker | null>(null);
   const [deletedMarkerIds, setDeletedMarkerIds] = useState<string[]>([]);
   let labelIndex = 1;
 
@@ -133,6 +136,29 @@ export default function useMarkerManager({
 
     if (newDocId) {
       (marker as any).docId = newDocId;
+
+      setPrevMarker((prevMarker) => {
+        if (prevMarker) {
+          const prevDocId = (prevMarker as any).docId;
+          console.log(prevDocId);
+
+          if (prevDocId && prevDocId !== newDocId) {
+            try {
+              updateDoc(doc(db, "quests", prevDocId), { next: newDocId });
+              console.log(
+                `Updated 'next' field of document ID ${prevDocId} to ${newDocId}`
+              );
+            } catch (error) {
+              console.error(
+                `Failed to update 'next' field for ${prevDocId}`,
+                error
+              );
+            }
+          }
+        }
+        console.log(prevMarker);
+        return marker;
+      });
     }
 
     marker.addListener("dragend", async (event: google.maps.MapMouseEvent) => {
@@ -152,7 +178,6 @@ export default function useMarkerManager({
       if (markerCluster) {
         markerCluster.addMarker(marker);
       }
-      onMarkersChange(newMarkers);
       return newMarkers;
     });
   }
